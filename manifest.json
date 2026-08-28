@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "tim.theme-rotate",
+  "name": "Theme Rotate",
+  "version": "1.0.0",
+  "author": "tim",
+  "description": "Randomize the theme on demand, or auto-rotate it on a schedule",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Theme Rotate",
+    "description": "Randomize the theme on demand, or auto-rotate it on a schedule",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
