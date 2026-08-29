@@ -6,17 +6,20 @@ import qs.Ui
 
 // Bar icon + popup for randomizing/auto-rotating the Omarchy theme.
 //
-// Three things this offers, all from the one popup:
+// Four things this offers, all from the one popup:
 //   - "Random Theme Now": one-shot manual rotation.
 //   - Auto-rotate mode: Off / every 1-12h / Daily, picked via a ButtonGroup.
+//   - Follow the sun: restrict the pool to light themes after sunrise and
+//     dark themes after sunset (and swap as soon as the period changes).
 //   - The background check that actually does the auto-rotating: a Timer
 //     that polls every minute (cheap, wall-clock based via Date.now() so it
 //     self-corrects across suspend/resume) and fires when the configured
 //     interval has elapsed since the last rotation.
 //
-// State (mode, intervalHours, lastRotated, lastTheme) lives in this widget's
-// shell.json entry, following the same settings + updateEntryInline pattern
-// as the built-in clock/power widgets, so it survives shell restarts.
+// State (mode, intervalHours, lastRotated, lastTheme, followSun) lives in
+// this widget's shell.json entry, following the same settings +
+// updateEntryInline pattern as the built-in clock/power widgets, so it
+// survives shell restarts.
 Panel {
   id: root
   moduleName: "tim.theme-rotate"
@@ -27,6 +30,8 @@ Panel {
   readonly property int intervalHours: parseInt(setting("intervalHours", 6), 10) || 6
   readonly property real lastRotated: Number(setting("lastRotated", 0)) || 0
   readonly property string lastTheme: setting("lastTheme", "")
+  readonly property bool followSun: !!setting("followSun", false)
+  readonly property string lastPeriod: setting("lastPeriod", "")
   readonly property string modeValue: mode === "interval" ? String(intervalHours) : "off"
 
   readonly property var rotateOptions: [
@@ -40,6 +45,11 @@ Panel {
 
   property string currentTheme: ""
   property bool busy: false
+  property bool rotateIfNeeded: false
+  property string sunPeriod: ""
+  property string sunSunrise: ""
+  property string sunSunset: ""
+  property string sunSource: ""
 
   // Bumped by a ticker Timer while the panel is open, purely so the
   // "next rotation in" text is referenced here and recomputes on a cadence
@@ -67,17 +77,50 @@ Panel {
     if (!currentProc.running) currentProc.running = true
   }
 
-  function rotateNow() {
+  function pluginBin(name) {
+    return Quickshell.env("HOME") + "/.config/omarchy/plugins/tim.theme-rotate/bin/" + name
+  }
+
+  function rotateCommand(ifNeeded) {
+    var cmd = [root.pluginBin("rotate-random.sh")]
+    if (root.followSun) cmd.push("--follow-sun")
+    if (ifNeeded) cmd.push("--if-needed")
+    return cmd
+  }
+
+  function rotateNow(ifNeeded) {
     if (root.busy || rotateProc.running) return
-    root.busy = true
+    root.rotateIfNeeded = !!ifNeeded
+    if (!ifNeeded) root.busy = true
+    rotateProc.command = root.rotateCommand(!!ifNeeded)
     rotateProc.running = true
   }
 
+  function setFollowSun(on) {
+    var entry = { followSun: !!on }
+    if (!on) entry.lastPeriod = ""
+    root.persist(entry)
+    if (on) {
+      root.refreshSun()
+      root.rotateNow(true)
+    }
+  }
+
   function checkDue() {
-    if (root.mode !== "interval") return
     if (root.busy || rotateProc.running) return
-    var dueAt = root.lastRotated + root.intervalHours * 3600000
-    if (Date.now() >= dueAt) root.rotateNow()
+    var intervalDue = false
+    if (root.mode === "interval") {
+      var dueAt = root.lastRotated + root.intervalHours * 3600000
+      intervalDue = Date.now() >= dueAt
+    }
+    if (intervalDue) {
+      root.rotateNow(false)
+      return
+    }
+    // Catch sunrise/sunset (and resume-from-sleep) without waiting for
+    // the next scheduled interval: switch pools as soon as the period
+    // no longer matches the last applied one.
+    if (root.followSun) root.rotateNow(true)
   }
 
   function nextDueText() {
@@ -92,12 +135,34 @@ Panel {
     return h > 0 ? ("Next rotation in " + h + "h " + m + "m") : ("Next rotation in " + m + "m")
   }
 
-  function open() { root.controller.show(); root.refreshCurrent() }
+  function refreshSun() {
+    if (!sunProc.running) sunProc.running = true
+  }
+
+  function sunStatusText() {
+    if (!root.followSun) return ""
+    if (root.sunPeriod === "") return "Looking up sunrise and sunset…"
+    var when = root.sunPeriod === "day" ? "Daytime · light themes" : "Night · dark themes"
+    var times = []
+    if (root.sunSunrise !== "") times.push("sunrise " + root.sunSunrise)
+    if (root.sunSunset !== "") times.push("sunset " + root.sunSunset)
+    return times.length ? (when + " · " + times.join(" · ")) : when
+  }
+
+  function randomButtonText() {
+    if (root.busy) return "Rotating…"
+    if (!root.followSun) return "🎲  Random Theme Now"
+    if (root.sunPeriod === "day") return "🎲  Random Day Theme"
+    if (root.sunPeriod === "night") return "🎲  Random Night Theme"
+    return "🎲  Random Theme Now"
+  }
+
+  function open() { root.controller.show(); root.refreshCurrent(); root.refreshSun() }
   function close() { root.controller.hide() }
   function toggle() { root.opened ? root.close() : root.open() }
 
-  Component.onCompleted: root.refreshCurrent()
-  onOpenedChanged: if (opened) root.refreshCurrent()
+  Component.onCompleted: { root.refreshCurrent(); root.refreshSun() }
+  onOpenedChanged: if (opened) { root.refreshCurrent(); root.refreshSun() }
 
   visible: true
   implicitWidth: button.implicitWidth
@@ -110,16 +175,39 @@ Panel {
   }
 
   Process {
-    id: rotateProc
-    command: [Quickshell.env("HOME") + "/.config/omarchy/plugins/tim.theme-rotate/bin/rotate-random.sh"]
+    id: sunProc
+    command: [root.pluginBin("sun-status.sh")]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var name = String(text || "").trim()
-        if (name !== "") {
-          root.currentTheme = name
-          root.persist({ lastRotated: Date.now(), lastTheme: name })
-        }
+        var line = String(text || "").trim().split("\n").pop() || ""
+        var parts = line.split("\t")
+        if (parts.length >= 1 && parts[0] !== "") root.sunPeriod = parts[0]
+        if (parts.length >= 2) root.sunSunrise = parts[1]
+        if (parts.length >= 3) root.sunSunset = parts[2]
+        if (parts.length >= 4) root.sunSource = parts[3]
+      }
+    }
+  }
+
+  Process {
+    id: rotateProc
+    command: [root.pluginBin("rotate-random.sh")]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var line = String(text || "").trim().split("\n").pop() || ""
+        var parts = line.split("\t")
+        var action = parts.length > 1 ? parts[0] : "set"
+        var name = parts.length > 1 ? parts[1] : parts[0]
+        name = String(name || "").trim()
+        if (name === "") return
+        root.currentTheme = name
+        var entry = { lastTheme: name }
+        if (root.followSun && root.sunPeriod !== "") entry.lastPeriod = root.sunPeriod
+        if (action !== "keep") entry.lastRotated = Date.now()
+        else if (!root.rotateIfNeeded) entry.lastRotated = Date.now()
+        root.persist(entry)
       }
     }
     onExited: root.busy = false
@@ -140,7 +228,10 @@ Panel {
     interval: 30000
     running: root.opened
     repeat: true
-    onTriggered: root._tick++
+    onTriggered: {
+      root._tick++
+      if (root.followSun) root.refreshSun()
+    }
   }
 
   IpcHandler {
@@ -230,9 +321,38 @@ Panel {
 
         PanelSeparator { foreground: root.bar.foreground }
 
+        PanelSectionHeader {
+          text: "DAY / NIGHT"
+          foreground: root.bar.foreground
+          fontFamily: root.bar.fontFamily
+        }
+
+        Toggle {
+          width: parent.width
+          label: "Follow the sun"
+          description: "Random light theme after sunrise, random dark theme after sunset."
+          foreground: root.bar.foreground
+          accent: Color.accent
+          fontFamily: root.bar.fontFamily
+          checked: root.followSun
+          onClicked: root.setFollowSun(!root.followSun)
+        }
+
+        Text {
+          visible: root.followSun
+          width: parent.width
+          wrapMode: Text.WordWrap
+          text: root.sunStatusText()
+          color: Qt.darker(root.bar.foreground, 1.4)
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+
+        PanelSeparator { foreground: root.bar.foreground }
+
         Button {
           width: parent.width
-          text: root.busy ? "Rotating…" : "🎲  Random Theme Now"
+          text: root.randomButtonText()
           bordered: true
           foreground: root.bar.foreground
           accent: Color.accent
@@ -241,7 +361,7 @@ Panel {
           horizontalPadding: Style.spacing.controlPaddingX
           verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
           iconSpinning: root.busy
-          onClicked: root.rotateNow()
+          onClicked: root.rotateNow(false)
         }
       }
     }
