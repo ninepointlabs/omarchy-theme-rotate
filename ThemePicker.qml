@@ -446,7 +446,9 @@ PanelWindow {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.rightMargin: Style.space(8)
-                text: String(cell.modelData.mode) === "light" ? "☀" : "☾"
+                // md-weather-sunny / md-weather-night, for the same reason
+                // the bar icon is a Nerd Font glyph rather than an emoji.
+                text: String(cell.modelData.mode) === "light" ? "󰖙" : "󰖔"
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall

@@ -312,10 +312,10 @@ Panel {
 
   function randomButtonText() {
     if (root.busy) return "Rotating…"
-    if (!root.followSun) return "🎲  Random Theme Now"
-    if (root.sunPeriod === "day") return "🎲  Random Day Theme"
-    if (root.sunPeriod === "night") return "🎲  Random Night Theme"
-    return "🎲  Random Theme Now"
+    if (!root.followSun) return "Random Theme Now"
+    if (root.sunPeriod === "day") return "Random Day Theme"
+    if (root.sunPeriod === "night") return "Random Night Theme"
+    return "Random Theme Now"
   }
 
   function open() { root.controller.show(); root.refreshCurrent(); root.refreshSun(); root.refreshThemes() }
@@ -445,7 +445,11 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.paused ? "⏸" : "🔀"
+    // Nerd Font glyphs (md-pause / md-shuffle), not emoji: the bar paints
+    // its icons in the theme foreground, and a color emoji ignores that and
+    // renders in its own palette. BarIconButton's optical centering assumes
+    // a text glyph too.
+    text: root.paused ? "󰏤" : "󰒝"
     slotSize: Style.bar.iconSlot
     tooltipText: root.paused ? "Theme Rotate — paused" : "Theme Rotate"
     onPressed: function(b) { root.toggle() }
@@ -491,7 +495,8 @@ Panel {
 
         Button {
           width: parent.width
-          text: root.paused ? "▶  Resume rotation" : "⏸  Pause rotation"
+          iconText: root.paused ? "󰐊" : "󰏤"
+          text: root.paused ? "Resume rotation" : "Pause rotation"
           tooltipText: root.paused
             ? "Start rotating again from a fresh interval"
             : "Stay on the current theme until you resume"
@@ -572,7 +577,8 @@ Panel {
 
         Button {
           width: parent.width
-          text: "🖼  Choose themes…"
+          iconText: "󰏘"
+          text: "Choose themes…"
           tooltipText: "Pick which installed themes the rotation is allowed to use"
           bordered: true
           leftAlign: true
@@ -599,6 +605,7 @@ Panel {
 
         Button {
           width: parent.width
+          iconText: "󰝮"
           text: root.randomButtonText()
           bordered: true
           foreground: root.bar.foreground
