@@ -7,7 +7,9 @@ auto-rotates your theme, optionally following sunrise and sunset.
 
 ## Features
 
-- Bar icon (🔀, ⏸ while paused) with a popup panel.
+- Monochrome bar icon (a shuffle glyph, a pause glyph while paused) with
+  a popup panel. Icons are Nerd Font glyphs, so they take the theme's bar
+  foreground instead of an emoji font's own colors.
 - **Random Theme Now** — manually shuffle to a random installed theme different from the current one.
 - **Auto-rotate** on a schedule: Off / every 1h / 3h / 6h / 12h / Daily.
 - **Pause** — freeze on the current theme without losing your schedule.
@@ -59,7 +61,7 @@ your currently applied theme.
 
 ## Usage
 
-Click the 🔀 icon in the bar:
+Click the shuffle icon in the bar:
 
 - **Random Theme Now** rotates immediately to a random theme (or a random
   day/night theme when Follow the sun is on).
