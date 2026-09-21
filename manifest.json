@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "tim.theme-rotate",
   "name": "Theme Rotate",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "tim",
-  "description": "Randomize the theme on demand, auto-rotate it on a schedule, or follow sunrise and sunset",
+  "description": "Randomize the theme on demand, auto-rotate it on a schedule or with the sun, pause it, and pick which themes take part",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "Theme Rotate",
-    "description": "Randomize the theme on demand, auto-rotate it on a schedule, or follow sunrise and sunset",
+    "description": "Randomize the theme on demand, auto-rotate it on a schedule or with the sun, pause it, and pick which themes take part",
     "category": "System",
     "allowMultiple": false
   }
