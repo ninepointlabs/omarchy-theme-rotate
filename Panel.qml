@@ -59,13 +59,39 @@ Panel {
   // snapshot. The shell writes that file atomically, so a watcher only ever
   // sees whole documents, and it updates `shellConfig` in-process before the
   // write, so nothing downstream depends on our read latency.
-  readonly property string shellConfigPath: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+  //
+  // What this widget must never do, though, is read whatever happens to be at
+  // that path. This is a bar widget: it lives inside a shell process that
+  // stays up for the entire session, so a path swapped out from under it is
+  // the shell's problem forever. A symlink would make the shell follow a file
+  // the user never pointed it at, a FIFO or device node would block it on
+  // open, and an oversized file would be loaded into memory whole. Hence the
+  // split below — a watcher that never loads anything, and a guarded reader.
+  readonly property string shellConfigDir: Quickshell.env("HOME") + "/.config/omarchy"
+  readonly property string shellConfigPath: root.shellConfigDir + "/shell.json"
   property var liveEntry: null
   property bool configLoaded: false
   property var pendingOverrides: null
+  // A change that arrived while a read was already in flight. The read that
+  // is running may predate it, so one more is owed once this one finishes —
+  // but only ever one, however many changes land in the meantime.
+  property bool configReadQueued: false
 
   function entryFromConfig(text) {
     return SettingsMerge.entryFromConfig(text, root.moduleName)
+  }
+
+  // Every read of shell.json goes through bin/safe-read-shell-json.sh, which
+  // refuses a symlink, anything that isn't a regular file, and anything over
+  // its size cap, printing nothing when it refuses. Reads are coalesced
+  // rather than stacked: shell.json is rewritten on every widget's every
+  // setting change, and one instance of this runs per monitor.
+  function readLiveConfig() {
+    if (configProc.running) {
+      root.configReadQueued = true
+      return
+    }
+    configProc.running = true
   }
 
   function applyLiveConfig(text) {
@@ -330,26 +356,71 @@ Panel {
   function close() { root.controller.hide() }
   function toggle() { root.opened ? root.close() : root.open() }
 
-  Component.onCompleted: { root.refreshCurrent(); root.refreshSun() }
+  // The initial read is explicit now that the watcher never loads anything
+  // itself, and it goes first: every write is held until it lands.
+  Component.onCompleted: { root.readLiveConfig(); root.refreshCurrent(); root.refreshSun() }
   onOpenedChanged: if (opened) { root.refreshCurrent(); root.refreshSun(); root.refreshThemes() }
 
   visible: true
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  // Same pattern the shell itself uses for this file: watch, reload on
-  // change, parse on load. printErrors stays off because a missing
-  // shell.json is a normal first-run state, not something to log about.
+  // A watcher, not a reader — the same shape the bar itself uses to notice
+  // its toggles change. `preload: false` plus never calling text(), data()
+  // or reload() means this FileView only ever stats the path to watch it; it
+  // never opens the file, so none of the swapped-path hazards above can
+  // reach it. It answers one question, "did that path change", and the
+  // guarded reader answers "and what is safely in it now".
+  //
+  // printErrors stays off because a missing shell.json is a normal first-run
+  // state, not something to log about.
   FileView {
-    id: configFile
+    id: configWatcher
     path: root.shellConfigPath
+    preload: false
     watchChanges: true
     printErrors: false
-    onLoaded: root.applyLiveConfig(text())
-    // Unreadable config: fall back to the injected snapshot rather than
-    // holding every write forever.
-    onLoadFailed: function(error) { root.applyLiveConfig("") }
-    onFileChanged: reload()
+    onFileChanged: root.readLiveConfig()
+  }
+
+  // The file watch above survives the atomic replaces the shell does, and
+  // re-arms itself across a plain delete-and-recreate. What it does not
+  // survive is the path becoming a symlink: the watch follows the link to
+  // its target, and once the link is removed it stops delivering entirely,
+  // so the widget would stay frozen on stale settings even after the user
+  // put a real file back. Watching the containing directory covers that —
+  // it keeps reporting throughout — and is the same fallback the bar uses
+  // for its toggles directory. It loads nothing either; a directory only
+  // ever gets stat'd here.
+  //
+  // It does fire for unrelated files in that directory, shell.json.bak.*
+  // among them, which is why reads are coalesced rather than stacked.
+  FileView {
+    id: configDirWatcher
+    path: root.shellConfigDir
+    preload: false
+    watchChanges: true
+    printErrors: false
+    onFileChanged: root.readLiveConfig()
+  }
+
+  Process {
+    id: configProc
+    command: [root.pluginBin("safe-read-shell-json.sh")]
+    stdout: StdioCollector {
+      waitForEnd: true
+      // Fires even when the script refused and printed nothing, so this is
+      // also the unreadable-config path: applyLiveConfig("") parses to no
+      // entry, leaves the injected snapshot in charge, and — crucially —
+      // releases any writes queued behind the first read rather than holding
+      // them forever.
+      onStreamFinished: root.applyLiveConfig(text)
+    }
+    onExited: {
+      if (!root.configReadQueued) return
+      root.configReadQueued = false
+      configProc.running = true
+    }
   }
 
   Process {

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tim.theme-rotate",
   "name": "Theme Rotate",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "tim",
   "description": "Randomize the theme on demand, auto-rotate it on a schedule or with the sun, pause it, and pick which themes take part",
   "kinds": [

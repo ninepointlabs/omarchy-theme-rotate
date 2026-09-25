@@ -133,15 +133,37 @@ the shell handed it. Two things keep them from fighting:
   shuffling on top of each other. Rotations you ask for yourself never
   debounce.
 
+### Reading shell.json safely
+
+Because the widget reads `~/.config/omarchy/shell.json` live, and does so
+from a shell process that stays up for the whole session, it never reads
+that path directly. Watching and reading are split in two:
+
+- The widget watches the path, and the directory holding it, purely for
+  change notifications — those watchers never open or load the file.
+- Every actual read goes through
+  [`bin/safe-read-shell-json.sh`](bin/safe-read-shell-json.sh), which prints
+  the file only if it is still an ordinary file: it refuses a symlink, a
+  FIFO, a device node or a directory, and refuses anything over a 512 KiB
+  cap. A refusal prints nothing.
+
+So a path swapped for a link to another file can't make the shell read that
+file, a special file can't block it, and an oversized file can't be pulled
+into memory. When a read is refused the widget falls back to the settings
+snapshot the shell gave it, exactly as it already did for an unreadable
+file, and picks the file back up once it is an ordinary file again.
+
 ## Tests
 
 ```bash
 node --test tests/
 ```
 
-Covers the settings merge rules: which source wins, that no key is ever
+Covers the settings merge rules — which source wins, that no key is ever
 dropped whichever side holds it, and that `false`/`0` are values rather than
-missing settings.
+missing settings — and the read guard above, including that a refused path
+prints nothing, that a missing file is a normal silent success, and that a
+FIFO is refused rather than blocked on.
 
 ## How it works (scripts)
 
