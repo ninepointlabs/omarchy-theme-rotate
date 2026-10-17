@@ -38,7 +38,7 @@ test("facts: Nine Point Labs, created date, support address", () => {
 
 test("privacy statement names the one network service and where data lives", () => {
   assert.match(About.PRIVACY, /No accounts and no telemetry/)
-  assert.match(About.PRIVACY, /wttr\.in/)
+  assert.match(About.PRIVACY, /wttr\.in, and only while Follow the sun is on/)
   assert.match(About.PRIVACY, /~\/\.config\/omarchy\/shell\.json/)
   // wttr.in is the only host any script or QML file talks to.
   const hosts = new Set()
@@ -74,4 +74,16 @@ test("about-versions.sh reports each tool's version, and blanks for missing ones
   stub("omarchy", "exit 1")
   assert.deepEqual(About.parseVersions(run()), { quickshell: "", qt: "6.99.1", omarchy: "" })
   fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test("the panel only looks up the sun while Follow the sun is on", () => {
+  const panel = fs.readFileSync(path.join(ROOT, "Panel.qml"), "utf8")
+  const fn = panel.match(/function refreshSun\(\) \{([\s\S]*?)\n  \}/)
+  assert.ok(fn, "refreshSun() not found")
+  const body = fn[1]
+  const guard = body.indexOf("if (!root.followSun) return")
+  assert.ok(guard >= 0, "refreshSun() must return early when followSun is off")
+  assert.ok(guard < body.indexOf("sunProc.running = true"), "the guard must come before starting sunProc")
+  // sunProc is the only thing that runs sun-status.sh from the panel.
+  assert.equal(panel.match(/sunProc\.running = true/g).length, 1)
 })
