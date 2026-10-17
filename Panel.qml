@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "SettingsMerge.js" as SettingsMerge
+import "About.js" as About
 
 // Bar icon + popup for randomizing/auto-rotating the Omarchy theme.
 //
@@ -138,6 +139,15 @@ Panel {
   // instead of freezing at the value from when the popup opened.
   property int _tick: 0
 
+  // The About page replaces the controls inside the same popup. Its facts
+  // (version from manifest.json, LICENSE, toolkit versions) are read only
+  // the first time it is shown.
+  property bool showAbout: false
+  property bool aboutLoaded: false
+  property var aboutVersions: ({ quickshell: "", qt: "", omarchy: "" })
+  property string aboutManifest: ""
+  property string aboutLicense: ""
+
   function persist(overrides) {
     // Before the first read of shell.json, hold the write rather than guess a
     // base: an empty or stale one would erase keys this instance has never
@@ -221,6 +231,22 @@ Panel {
 
   function pluginBin(name) {
     return Quickshell.env("HOME") + "/.config/omarchy/plugins/tim.theme-rotate/bin/" + name
+  }
+
+  function pluginFile(name) {
+    return Quickshell.env("HOME") + "/.config/omarchy/plugins/tim.theme-rotate/" + name
+  }
+
+  function setAbout(on) {
+    root.showAbout = !!on
+    if (!on || root.aboutLoaded) return
+    root.aboutLoaded = true
+    if (!versionsProc.running) versionsProc.running = true
+  }
+
+  function openAbout() {
+    root.setAbout(true)
+    if (!root.opened) root.open()
   }
 
   function rotateCommand(ifNeeded, debounce) {
@@ -359,7 +385,10 @@ Panel {
   // The initial read is explicit now that the watcher never loads anything
   // itself, and it goes first: every write is held until it lands.
   Component.onCompleted: { root.readLiveConfig(); root.refreshCurrent(); root.refreshSun() }
-  onOpenedChanged: if (opened) { root.refreshCurrent(); root.refreshSun(); root.refreshThemes() }
+  onOpenedChanged: {
+    if (opened) { root.refreshCurrent(); root.refreshSun(); root.refreshThemes() }
+    else root.showAbout = false
+  }
 
   visible: true
   implicitWidth: button.implicitWidth
@@ -421,6 +450,27 @@ Panel {
       root.configReadQueued = false
       configProc.running = true
     }
+  }
+
+  // Plugin-owned files for the About page, loaded on first show.
+  FileView {
+    id: manifestFile
+    path: root.aboutLoaded ? root.pluginFile("manifest.json") : ""
+    printErrors: false
+    onLoaded: root.aboutManifest = text()
+  }
+
+  FileView {
+    id: licenseFile
+    path: root.aboutLoaded ? root.pluginFile("LICENSE") : ""
+    printErrors: false
+    onLoaded: root.aboutLicense = text()
+  }
+
+  Process {
+    id: versionsProc
+    command: [root.pluginBin("about-versions.sh")]
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.aboutVersions = About.parseVersions(text) }
   }
 
   Process {
@@ -510,6 +560,8 @@ Panel {
     function resume(): void { root.setPaused(false) }
     function togglePause(): void { root.setPaused(!root.paused) }
     function random(): void { root.rotateNow(false, false) }
+    // The popup's About page: version, license, support, privacy.
+    function about(): void { root.openAbout() }
   }
 
   BarIconButton {
@@ -534,27 +586,65 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(420))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight)
+    contentHeight: panel.fittedContentHeight(root.showAbout ? aboutView.implicitHeight : column.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onCloseRequested: root.close()
+      // Esc steps back out of About before it closes the popup.
+      onCloseRequested: root.showAbout ? root.setAbout(false) : root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      onTextKey: function(t) { if (t === "i" || t === "?") root.setAbout(!root.showAbout) }
+
+      AboutView {
+        id: aboutView
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        visible: root.showAbout
+        foreground: root.bar.foreground
+        accent: Color.accent
+        fontFamily: root.bar.fontFamily
+        version: About.manifestVersion(root.aboutManifest)
+        licenseText: root.aboutLicense
+        versions: root.aboutVersions
+        onBackRequested: root.setAbout(false)
+      }
 
       Column {
         id: column
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
+        visible: !root.showAbout
         spacing: Style.space(14)
 
-        Text {
-          text: "Theme Rotation"
-          color: root.bar.foreground
-          font.family: root.bar.fontFamily
-          font.pixelSize: Style.font.title
-          font.bold: true
+        Item {
+          width: parent.width
+          height: Math.max(titleText.implicitHeight, aboutButton.implicitHeight)
+
+          Text {
+            id: titleText
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Theme Rotation"
+            color: root.bar.foreground
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.title
+            font.bold: true
+          }
+
+          PanelActionButton {
+            id: aboutButton
+            objectName: "aboutButton"
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            iconText: "󰋽"
+            tooltipText: "About Theme Rotate (i)"
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            onClicked: root.setAbout(true)
+          }
         }
 
         Text {
