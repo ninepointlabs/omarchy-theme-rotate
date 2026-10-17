@@ -78,6 +78,12 @@ Click the shuffle icon in the bar:
   the light or dark half when Follow the sun is on. If that leaves nothing
   (say you picked only dark themes and the sun is up), it falls back to
   your chosen set rather than getting stuck.
+- The info button next to the popup's title (or <kbd>i</kbd> while the
+  popup is open) shows **About**: the version, license (readable in place),
+  Nine Point Labs, the support address,
+  [help@ninepointlabs.com](mailto:help@ninepointlabs.com), with Email and
+  Copy buttons, and what the plugin does with your data. <kbd>Esc</kbd>
+  goes back.
 
 ### Keyboard and scripting
 
@@ -91,6 +97,7 @@ omarchy-shell tim.theme-rotate togglePause  # pause / resume
 omarchy-shell tim.theme-rotate pause
 omarchy-shell tim.theme-rotate resume
 omarchy-shell tim.theme-rotate random       # rotate now
+omarchy-shell tim.theme-rotate about        # the popup's About page
 ```
 
 Set a weather location if you want sunrise/sunset for a specific place
@@ -161,9 +168,10 @@ node --test tests/
 
 Covers the settings merge rules — which source wins, that no key is ever
 dropped whichever side holds it, and that `false`/`0` are values rather than
-missing settings — and the read guard above, including that a refused path
+missing settings — the read guard above, including that a refused path
 prints nothing, that a missing file is a normal silent success, and that a
-FIFO is refused rather than blocked on.
+FIFO is refused rather than blocked on, and the About page's facts, checked
+against the real `manifest.json`, `LICENSE` and first commit.
 
 ## How it works (scripts)
 
