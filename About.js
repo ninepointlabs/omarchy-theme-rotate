@@ -13,8 +13,8 @@ var SUPPORT_EMAIL = "help@ninepointlabs.com"
 // Must stay true to what the plugin does. Network: only bin/sun-status.sh
 // (curl to wttr.in). Commands: omarchy theme list/current/set, omarchy weather
 // location. Files: shell.json (settings), the cache and state dirs below.
-var PRIVACY = "No accounts and no telemetry. The only network request is to wttr.in, to look up "
-  + "today's sunrise and sunset; it sends your Omarchy weather location if you have set one, "
+var PRIVACY = "No accounts and no telemetry. The only network request is to wttr.in, and only "
+  + "while Follow the sun is on, to look up today's sunrise and sunset; it sends your Omarchy weather location if you have set one, "
   + "otherwise wttr.in estimates it from your IP address. The answer is cached for the day in "
   + "~/.cache/omarchy-theme-rotate. Themes are listed and applied with the omarchy command. "
   + "Settings stay in ~/.config/omarchy/shell.json and rotation state in "

@@ -347,7 +347,9 @@ Panel {
     return h > 0 ? ("Next rotation in " + h + "h " + m + "m") : ("Next rotation in " + m + "m")
   }
 
+  // The lookup can reach wttr.in, so it only ever runs with Follow the sun on.
   function refreshSun() {
+    if (!root.followSun) return
     if (!sunProc.running) sunProc.running = true
   }
 
@@ -385,6 +387,9 @@ Panel {
   // The initial read is explicit now that the watcher never loads anything
   // itself, and it goes first: every write is held until it lands.
   Component.onCompleted: { root.readLiveConfig(); root.refreshCurrent(); root.refreshSun() }
+  // Turning Follow the sun on is saved asynchronously, so the lookup it needs
+  // runs from here, once the setting has actually landed.
+  onFollowSunChanged: if (root.followSun) root.refreshSun()
   onOpenedChanged: {
     if (opened) { root.refreshCurrent(); root.refreshSun(); root.refreshThemes() }
     else root.showAbout = false
